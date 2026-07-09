@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useEffect, useState } from "react";
 import { onboardCreator, type OnboardState } from "./actions";
 
 const CALL_LENGTHS = [10, 15, 30, 60];
@@ -10,11 +10,16 @@ export default function OnboardPage() {
     onboardCreator,
     {},
   );
+  const [timezone, setTimezone] = useState("UTC");
+  useEffect(() => {
+    setTimezone(Intl.DateTimeFormat().resolvedOptions().timeZone);
+  }, []);
 
   return (
     <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center gap-6 p-6">
       <h1 className="text-2xl font-semibold">Become a creator</h1>
       <form action={formAction} className="flex flex-col gap-4">
+        <input type="hidden" name="timezone" value={timezone} />
         <label className="flex flex-col gap-1">
           <span className="text-sm font-medium">Handle</span>
           <div className="flex items-center gap-1">

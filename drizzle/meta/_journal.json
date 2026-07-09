@@ -8,6 +8,20 @@
       "when": 1783639452138,
       "tag": "0000_blue_fixer",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1783640983337,
+      "tag": "0001_careful_wolverine",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1783640991553,
+      "tag": "0002_btree_gist_booking_exclusion",
+      "breakpoints": true
     }
   ]
 }
