@@ -57,6 +57,13 @@
       "when": 1783646041111,
       "tag": "0007_brainy_patch",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1783647338699,
+      "tag": "0008_naive_nightmare",
+      "breakpoints": true
     }
   ]
 }

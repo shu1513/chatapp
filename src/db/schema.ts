@@ -177,6 +177,23 @@ export const webhookEvents = pgTable("webhook_events", {
     .defaultNow(),
 });
 
+/** One transfer to a creator per completed booking. */
+export const payouts = pgTable("payouts", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  bookingId: uuid("booking_id")
+    .notNull()
+    .unique()
+    .references(() => bookings.id),
+  creatorId: text("creator_id")
+    .notNull()
+    .references(() => creators.userId),
+  amountCents: integer("amount_cents").notNull(),
+  transferId: text("transfer_id").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
 // --- domain tables ---
 
 export const creators = pgTable("creators", {

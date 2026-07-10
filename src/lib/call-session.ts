@@ -1,11 +1,24 @@
 import "server-only";
 
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { bookings, callSessions, sessionEvents } from "@/db/schema";
+import {
+  bookings,
+  callSessions,
+  creators,
+  payouts,
+  sessionEvents,
+} from "@/db/schema";
 import { bothPresentSeconds, type PresenceEvent } from "@/lib/overlap";
-import { refundBookingPayment } from "@/lib/payments";
+import {
+  creatorShareCents,
+  refundBookingPayment,
+  transferToCreator,
+} from "@/lib/payments";
 import { endRoom, roomNameForBooking } from "@/lib/video";
+
+/** Escrow window between call completion and creator payout. */
+const PAYOUT_DELAY_HOURS = Number(process.env.PAYOUT_DELAY_HOURS ?? 24);
 
 export const GRACE_SECONDS = 60;
 
@@ -319,5 +332,55 @@ export async function sweep(now = new Date()): Promise<void> {
   for (const b of missed) {
     await endRoom(roomNameForBooking(b.id));
     await settleSession(b.id, now, "sweeper");
+  }
+
+  // 3. Payouts: completed bookings past the escrow window, creator has a
+  // connected account, no payout yet. Transfer is idempotent per booking.
+  const owed = await db
+    .select({
+      bookingId: bookings.id,
+      creatorId: bookings.creatorId,
+      priceCents: bookings.priceCents,
+      paymentIntentId: bookings.paymentIntentId,
+      stripeAccountId: creators.stripeAccountId,
+    })
+    .from(bookings)
+    .innerJoin(callSessions, eq(callSessions.bookingId, bookings.id))
+    .innerJoin(creators, eq(creators.userId, bookings.creatorId))
+    .leftJoin(payouts, eq(payouts.bookingId, bookings.id))
+    .where(
+      and(
+        eq(bookings.status, "completed"),
+        isNull(payouts.id),
+        sql`${bookings.paymentIntentId} IS NOT NULL`,
+        sql`${creators.stripeAccountId} IS NOT NULL`,
+        sql`${callSessions.endedAt} <= ${new Date(
+          now.getTime() - PAYOUT_DELAY_HOURS * 3600 * 1000,
+        ).toISOString()}::timestamptz`,
+      ),
+    );
+
+  for (const o of owed) {
+    const amount = creatorShareCents(o.priceCents);
+    try {
+      const transferId = await transferToCreator({
+        bookingId: o.bookingId,
+        paymentIntentId: o.paymentIntentId!,
+        accountId: o.stripeAccountId!,
+        amountCents: amount,
+      });
+      await db
+        .insert(payouts)
+        .values({
+          bookingId: o.bookingId,
+          creatorId: o.creatorId,
+          amountCents: amount,
+          transferId,
+        })
+        .onConflictDoNothing();
+    } catch (e) {
+      // Account not ready / transient Stripe error: retried next sweep.
+      console.error(`[payout] transfer failed for booking ${o.bookingId}`, e);
+    }
   }
 }

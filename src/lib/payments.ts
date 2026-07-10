@@ -55,6 +55,75 @@ export async function createBookingCheckout(opts: {
   return session.url;
 }
 
+/** Platform take on every call; creators keep the rest. */
+export const PLATFORM_FEE_PCT = 20;
+
+export function creatorShareCents(priceCents: number): number {
+  return Math.round((priceCents * (100 - PLATFORM_FEE_PCT)) / 100);
+}
+
+export async function createExpressAccount(email: string): Promise<string> {
+  const account = await stripe().accounts.create({
+    type: "express",
+    email,
+    capabilities: { transfers: { requested: true } },
+  });
+  return account.id;
+}
+
+export async function createOnboardingLink(accountId: string): Promise<string> {
+  const link = await stripe().accountLinks.create({
+    account: accountId,
+    type: "account_onboarding",
+    refresh_url: `${baseUrl()}/dashboard/payouts`,
+    return_url: `${baseUrl()}/dashboard/payouts?onboarded=1`,
+  });
+  return link.url;
+}
+
+export async function getConnectStatus(accountId: string): Promise<{
+  detailsSubmitted: boolean;
+  payoutsEnabled: boolean;
+}> {
+  const account = await stripe().accounts.retrieve(accountId);
+  return {
+    detailsSubmitted: account.details_submitted ?? false,
+    payoutsEnabled: account.payouts_enabled ?? false,
+  };
+}
+
+/**
+ * Move the creator's share of a booking to their connected account.
+ * source_transaction ties the transfer to the original charge (works even
+ * while the charge is still pending); idempotency key = booking id makes
+ * retries safe.
+ */
+export async function transferToCreator(opts: {
+  bookingId: string;
+  paymentIntentId: string;
+  accountId: string;
+  amountCents: number;
+}): Promise<string> {
+  const pi = await stripe().paymentIntents.retrieve(opts.paymentIntentId);
+  const chargeId =
+    typeof pi.latest_charge === "string"
+      ? pi.latest_charge
+      : pi.latest_charge?.id;
+  if (!chargeId) throw new Error(`No charge on ${opts.paymentIntentId}`);
+
+  const transfer = await stripe().transfers.create(
+    {
+      amount: opts.amountCents,
+      currency: "usd",
+      destination: opts.accountId,
+      source_transaction: chargeId,
+      metadata: { bookingId: opts.bookingId },
+    },
+    { idempotencyKey: `payout-${opts.bookingId}` },
+  );
+  return transfer.id;
+}
+
 export async function refundBookingPayment(
   paymentIntentId: string,
 ): Promise<void> {
