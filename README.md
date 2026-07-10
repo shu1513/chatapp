@@ -8,21 +8,31 @@ Work in progress. See [plan.md](plan.md) for the architecture and phased build p
 
 ## Status
 
-Phase 1 (booking foundation) in progress:
+Core product works end to end in test mode:
 
 - [x] Magic-link auth (better-auth)
-- [x] Creator onboarding and public `/@handle` profile pages
-- [x] Weekly availability rules with timezone-correct slot generation
-- [x] Booking flow with database-enforced double-booking prevention
-- [x] Stripe Checkout, webhooks, refunds, Connect payouts (80/20 split)
-- [ ] Confirmation and reminder emails
-- [x] Timed video calls (LiveKit) with server-side session tracking
-- [x] Instant calls (presence, ringing, per-minute max-block)
+- [x] Creator onboarding, public `/@handle` pages, profile editing
+- [x] Availability engine: weekly rules, blackout days, buffers,
+      per-creator notice/horizon, timezone/DST-tested slot generation
+- [x] Booking flow with database-enforced double-booking prevention,
+      approval mode, cancellation policy
+- [x] Payments: Stripe Checkout, webhooks, refunds, Connect payouts
+      (80/20 split, 24h escrow)
+- [x] Timed video calls (LiveKit): server-side billing clock,
+      reconnect grace, hard stop at slot end, presence reconciler
+- [x] Instant calls: presence, ringing, auth hold at ring,
+      per-minute capture at settle
+- [x] Transactional emails and T-60 reminders (Resend or console)
+- [x] Trust & safety: reports, blocks, suspension, admin queue
+- [x] Policy pages, CI, Dockerfile + deploy runbook (see DEPLOY.md)
+
+Pre-launch checklist: Stripe platform pre-approval, Resend key +
+domain, production hosting + LiveKit Cloud, legal review of policies.
 
 ## Stack
 
 Next.js (App Router) · TypeScript · Postgres · Drizzle ORM · better-auth ·
-Tailwind. Planned: Stripe Connect, LiveKit, Resend, pg-boss.
+Tailwind · Stripe Connect · LiveKit · Resend.
 
 ## Development
 
