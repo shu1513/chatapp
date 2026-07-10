@@ -1,12 +1,14 @@
 import {
   boolean,
   customType,
+  date,
   integer,
   jsonb,
   pgEnum,
   pgTable,
   text,
   timestamp,
+  unique,
   uuid,
 } from "drizzle-orm/pg-core";
 
@@ -183,10 +185,33 @@ export const creators = pgTable("creators", {
   stripeAccountId: text("stripe_account_id"),
   status: creatorStatus("status").notNull().default("pending"),
   timezone: text("timezone").notNull().default("UTC"),
+  /** gap enforced between calls, minutes */
+  bufferMin: integer("buffer_min").notNull().default(0),
+  /** slots starting sooner than this are hidden */
+  minNoticeMin: integer("min_notice_min").notNull().default(60),
+  /** how far ahead fans can book, days */
+  horizonDays: integer("horizon_days").notNull().default(14),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
 });
+
+/** Whole-day blackouts (vacation, one-offs), dates in the creator's timezone. */
+export const availabilityExceptions = pgTable(
+  "availability_exceptions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    creatorId: text("creator_id")
+      .notNull()
+      .references(() => creators.userId, { onDelete: "cascade" }),
+    /** local calendar date, YYYY-MM-DD */
+    date: date("date").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [unique().on(t.creatorId, t.date)],
+);
 
 export const availabilityRules = pgTable("availability_rules", {
   id: uuid("id").primaryKey().defaultRandom(),

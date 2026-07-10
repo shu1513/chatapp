@@ -1,10 +1,15 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { availabilityRules, creators } from "@/db/schema";
+import {
+  availabilityExceptions,
+  availabilityRules,
+  creators,
+} from "@/db/schema";
 import { getSession } from "@/lib/session";
 
 const timeToMinute = (t: string) => {
@@ -23,15 +28,7 @@ const windowSchema = z
     "Window end must be after start",
   );
 
-export type AvailabilityState = {
-  error?: string;
-  saved?: boolean;
-};
-
-export async function saveAvailability(
-  _prev: AvailabilityState,
-  formData: FormData,
-): Promise<AvailabilityState> {
+async function requireCreator() {
   const session = await getSession();
   if (!session?.user) {
     redirect("/signin");
@@ -42,8 +39,21 @@ export async function saveAvailability(
   if (!creator) {
     redirect("/onboard");
   }
+  return creator;
+}
 
-  // Rows arrive as parallel arrays for enabled weekdays.
+export type AvailabilityState = {
+  error?: string;
+  saved?: boolean;
+};
+
+export async function saveAvailability(
+  _prev: AvailabilityState,
+  formData: FormData,
+): Promise<AvailabilityState> {
+  const creator = await requireCreator();
+
+  // Rows arrive as parallel arrays.
   const weekdays = formData.getAll("weekday").map(Number);
   const starts = formData.getAll("start").map(String);
   const ends = formData.getAll("end").map(String);
@@ -65,6 +75,25 @@ export async function saveAvailability(
     windows.push(parsed.data);
   }
 
+  // Windows on the same weekday must not overlap, or fans would see
+  // duplicate slots.
+  for (let day = 0; day < 7; day++) {
+    const dayWindows = windows
+      .filter((w) => w.weekday === day)
+      .sort((a, b) => timeToMinute(a.start) - timeToMinute(b.start));
+    for (let i = 1; i < dayWindows.length; i++) {
+      if (
+        timeToMinute(dayWindows[i].start) < timeToMinute(dayWindows[i - 1].end)
+      ) {
+        return {
+          error: `Overlapping windows on ${
+            ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][day]
+          }`,
+        };
+      }
+    }
+  }
+
   await db.transaction(async (tx) => {
     await tx
       .delete(availabilityRules)
@@ -81,5 +110,77 @@ export async function saveAvailability(
     }
   });
 
+  return { saved: true };
+}
+
+const rulesSchema = z.object({
+  bufferMin: z.coerce
+    .number()
+    .int()
+    .refine((v) => [0, 5, 10, 15].includes(v), "Invalid buffer"),
+  minNoticeMin: z.coerce
+    .number()
+    .int()
+    .refine((v) => [60, 180, 720, 1440].includes(v), "Invalid notice"),
+  horizonDays: z.coerce
+    .number()
+    .int()
+    .refine((v) => [7, 14, 30].includes(v), "Invalid horizon"),
+});
+
+export async function saveBookingRules(
+  _prev: AvailabilityState,
+  formData: FormData,
+): Promise<AvailabilityState> {
+  const creator = await requireCreator();
+  const parsed = rulesSchema.safeParse({
+    bufferMin: formData.get("bufferMin"),
+    minNoticeMin: formData.get("minNoticeMin"),
+    horizonDays: formData.get("horizonDays"),
+  });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0].message };
+  }
+  await db
+    .update(creators)
+    .set(parsed.data)
+    .where(eq(creators.userId, creator.userId));
+  return { saved: true };
+}
+
+const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+
+export async function addBlackout(
+  _prev: AvailabilityState,
+  formData: FormData,
+): Promise<AvailabilityState> {
+  const creator = await requireCreator();
+  const parsed = dateSchema.safeParse(formData.get("date"));
+  if (!parsed.success) {
+    return { error: "Pick a date" };
+  }
+  await db
+    .insert(availabilityExceptions)
+    .values({ creatorId: creator.userId, date: parsed.data })
+    .onConflictDoNothing();
+  revalidatePath("/dashboard/availability");
+  return { saved: true };
+}
+
+export async function removeBlackout(
+  _prev: AvailabilityState,
+  formData: FormData,
+): Promise<AvailabilityState> {
+  const creator = await requireCreator();
+  const id = String(formData.get("id"));
+  await db
+    .delete(availabilityExceptions)
+    .where(
+      and(
+        eq(availabilityExceptions.id, id),
+        eq(availabilityExceptions.creatorId, creator.userId),
+      ),
+    );
+  revalidatePath("/dashboard/availability");
   return { saved: true };
 }

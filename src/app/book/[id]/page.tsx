@@ -63,6 +63,14 @@ export default async function BookingPage({
         <p className="mt-2 text-sm text-gray-500">
           {STATUS_LABEL[booking.status] ?? booking.status}
         </p>
+        {["confirmed", "pending_approval"].includes(booking.status) && (
+          <a
+            href={`/book/${booking.id}/ics`}
+            className="mt-2 inline-block text-sm text-gray-600 underline"
+          >
+            Add to calendar (.ics)
+          </a>
+        )}
       </div>
       {booking.status === "confirmed" &&
         new Date(slotEnd).getTime() > Date.now() && (

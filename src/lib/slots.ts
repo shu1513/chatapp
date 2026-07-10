@@ -23,26 +23,38 @@ export function generateSlots(opts: {
   rules: AvailabilityRule[];
   timezone: string;
   callLengthMin: number;
+  /** enforced gap between calls, minutes */
+  bufferMin?: number;
   now: Date;
   horizonDays: number;
   /** slots starting sooner than this many minutes from now are hidden */
   minNoticeMin: number;
   /** existing bookings / blocked intervals (UTC) */
   busy: Interval[];
+  /** whole-day blackouts, local YYYY-MM-DD dates in the creator's timezone */
+  blackoutDates?: ReadonlySet<string>;
 }): Interval[] {
   const {
     rules,
     timezone,
     callLengthMin,
+    bufferMin = 0,
     now,
     horizonDays,
     minNoticeMin,
     busy,
+    blackoutDates,
   } = opts;
 
   if (rules.length === 0 || callLengthMin <= 0) return [];
 
   const earliestStart = now.getTime() + minNoticeMin * 60_000;
+  // The buffer applies around existing bookings too: a slot may not start
+  // or end within `bufferMin` of a busy interval.
+  const bufferedBusy = busy.map((b) => ({
+    start: new Date(b.start.getTime() - bufferMin * 60_000),
+    end: new Date(b.end.getTime() + bufferMin * 60_000),
+  }));
   const slots: Interval[] = [];
 
   // Today's calendar date in the creator's timezone.
@@ -56,13 +68,15 @@ export function generateSlots(opts: {
     const localNoon = new TZDate(y, m, d + offset, 12, 0, timezone);
     const weekday = localNoon.getDay();
 
+    if (blackoutDates?.has(localDateString(localNoon))) continue;
+
     for (const rule of rules) {
       if (rule.weekday !== weekday) continue;
 
       for (
         let startMin = rule.startMinute;
         startMin + callLengthMin <= rule.endMinute;
-        startMin += callLengthMin
+        startMin += callLengthMin + bufferMin
       ) {
         const start = new TZDate(y, m, d + offset, 0, startMin, timezone);
         const end = new TZDate(
@@ -76,7 +90,7 @@ export function generateSlots(opts: {
 
         if (start.getTime() < earliestStart) continue;
         if (end.getTime() <= start.getTime()) continue; // DST artifact
-        const overlapsBusy = busy.some(
+        const overlapsBusy = bufferedBusy.some(
           (b) =>
             start.getTime() < b.end.getTime() &&
             end.getTime() > b.start.getTime(),
@@ -93,4 +107,15 @@ export function generateSlots(opts: {
 
   slots.sort((a, b) => a.start.getTime() - b.start.getTime());
   return slots;
+}
+
+/** Local calendar date of a TZDate as YYYY-MM-DD. */
+export function localDateString(d: {
+  getFullYear(): number;
+  getMonth(): number;
+  getDate(): number;
+}): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
+    d.getDate(),
+  ).padStart(2, "0")}`;
 }

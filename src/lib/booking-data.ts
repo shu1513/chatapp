@@ -2,11 +2,14 @@ import "server-only";
 
 import { and, eq, notInArray, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { availabilityRules, bookings, creators } from "@/db/schema";
+import {
+  availabilityExceptions,
+  availabilityRules,
+  bookings,
+  creators,
+} from "@/db/schema";
 import { generateSlots, type Interval } from "@/lib/slots";
 
-export const BOOKING_HORIZON_DAYS = 14;
-export const MIN_NOTICE_MIN = 60;
 /** How long a pending_payment booking holds its slot before going stale. */
 export const HOLD_TTL_MIN = 15;
 
@@ -54,21 +57,29 @@ export async function getAvailableSlots(creator: {
   userId: string;
   timezone: string;
   callLengthMin: number;
+  bufferMin: number;
+  minNoticeMin: number;
+  horizonDays: number;
 }): Promise<Interval[]> {
-  const [rules, busy] = await Promise.all([
+  const [rules, busy, exceptions] = await Promise.all([
     db.query.availabilityRules.findMany({
       where: eq(availabilityRules.creatorId, creator.userId),
     }),
     getBusyIntervals(creator.userId),
+    db.query.availabilityExceptions.findMany({
+      where: eq(availabilityExceptions.creatorId, creator.userId),
+    }),
   ]);
   return generateSlots({
     rules,
     timezone: creator.timezone,
     callLengthMin: creator.callLengthMin,
+    bufferMin: creator.bufferMin,
     now: new Date(),
-    horizonDays: BOOKING_HORIZON_DAYS,
-    minNoticeMin: MIN_NOTICE_MIN,
+    horizonDays: creator.horizonDays,
+    minNoticeMin: creator.minNoticeMin,
     busy,
+    blackoutDates: new Set(exceptions.map((e) => e.date)),
   });
 }
 

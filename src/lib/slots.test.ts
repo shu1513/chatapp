@@ -106,6 +106,59 @@ describe("generateSlots", () => {
     }
   });
 
+  it("skips blacked-out local dates", () => {
+    const slots = generateSlots({
+      ...base,
+      rules: [{ weekday: 1, startMinute: 540, endMinute: 600 }],
+      blackoutDates: new Set(["2026-07-06"]),
+    });
+    // Jul 6 gone, Jul 13 remains
+    expect(slots).toHaveLength(4);
+    expect(slots[0].start.toISOString()).toBe("2026-07-13T16:00:00.000Z");
+  });
+
+  it("applies buffer between generated slots", () => {
+    // 9:00-10:00, 15-min calls, 5-min buffer -> 9:00, 9:20, 9:40
+    const slots = generateSlots({
+      ...base,
+      rules: [{ weekday: 1, startMinute: 540, endMinute: 600 }],
+      bufferMin: 5,
+    });
+    const jul6 = slots.filter(
+      (s) => s.start.toISOString().slice(0, 10) === "2026-07-06",
+    );
+    expect(jul6.map((s) => s.start.toISOString())).toEqual([
+      "2026-07-06T16:00:00.000Z",
+      "2026-07-06T16:20:00.000Z",
+      "2026-07-06T16:40:00.000Z",
+    ]);
+  });
+
+  it("keeps buffer distance from existing bookings", () => {
+    // Booking at 16:20-16:35 with 5-min buffer. 16:00 slot survives: it
+    // ends 16:15, leaving exactly the 5-min gap before the booking.
+    // 16:20 slot dies (overlaps the booking). 16:40 slot survives: it
+    // starts exactly 5 min after the booking ends.
+    const slots = generateSlots({
+      ...base,
+      rules: [{ weekday: 1, startMinute: 540, endMinute: 600 }],
+      bufferMin: 5,
+      busy: [
+        {
+          start: new Date("2026-07-06T16:20:00Z"),
+          end: new Date("2026-07-06T16:35:00Z"),
+        },
+      ],
+    });
+    const jul6 = slots.filter(
+      (s) => s.start.toISOString().slice(0, 10) === "2026-07-06",
+    );
+    expect(jul6.map((s) => s.start.toISOString())).toEqual([
+      "2026-07-06T16:00:00.000Z",
+      "2026-07-06T16:40:00.000Z",
+    ]);
+  });
+
   it("drops zero-length artifacts on spring-forward day", () => {
     // US DST starts Sun Mar 8 2026, 2:00 -> 3:00 local (2:xx doesn't exist)
     const slots = generateSlots({
