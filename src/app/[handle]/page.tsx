@@ -1,12 +1,6 @@
 import { notFound } from "next/navigation";
-import { and, eq, notInArray, sql } from "drizzle-orm";
-import { db } from "@/db";
-import { availabilityRules, bookings, creators } from "@/db/schema";
-import { generateSlots } from "@/lib/slots";
+import { getAvailableSlots, getCreatorByHandle } from "@/lib/booking-data";
 import { SlotList } from "./slot-list";
-
-const BOOKING_HORIZON_DAYS = 14;
-const MIN_NOTICE_MIN = 60;
 
 export default async function CreatorPage({
   params,
@@ -20,44 +14,12 @@ export default async function CreatorPage({
   }
   const handle = decoded.slice(1);
 
-  const creator = await db.query.creators.findFirst({
-    where: eq(creators.handle, handle),
-  });
+  const creator = await getCreatorByHandle(handle);
   if (!creator) {
     notFound();
   }
 
-  const [rules, busyRows] = await Promise.all([
-    db.query.availabilityRules.findMany({
-      where: eq(availabilityRules.creatorId, creator.userId),
-    }),
-    db
-      .select({
-        start: sql<string>`lower(${bookings.slot})`,
-        end: sql<string>`upper(${bookings.slot})`,
-      })
-      .from(bookings)
-      .where(
-        and(
-          eq(bookings.creatorId, creator.userId),
-          notInArray(bookings.status, ["declined", "cancelled", "refunded"]),
-          sql`upper(${bookings.slot}) > now()`,
-        ),
-      ),
-  ]);
-
-  const slots = generateSlots({
-    rules,
-    timezone: creator.timezone,
-    callLengthMin: creator.callLengthMin,
-    now: new Date(),
-    horizonDays: BOOKING_HORIZON_DAYS,
-    minNoticeMin: MIN_NOTICE_MIN,
-    busy: busyRows.map((b) => ({
-      start: new Date(b.start),
-      end: new Date(b.end),
-    })),
-  });
+  const slots = await getAvailableSlots(creator);
 
   return (
     <main className="mx-auto flex min-h-screen max-w-lg flex-col gap-6 p-6">
@@ -74,7 +36,10 @@ export default async function CreatorPage({
       </div>
       <section className="flex flex-col gap-3">
         <h2 className="text-xl font-semibold">Available times</h2>
-        <SlotList slotStarts={slots.map((s) => s.start.toISOString())} />
+        <SlotList
+          handle={creator.handle}
+          slotStarts={slots.map((s) => s.start.toISOString())}
+        />
       </section>
     </main>
   );

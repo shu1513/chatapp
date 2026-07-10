@@ -1,0 +1,1 @@
+ALTER TYPE "public"."booking_status" ADD VALUE 'pending_payment' BEFORE 'pending_approval';

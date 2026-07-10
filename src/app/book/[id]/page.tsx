@@ -1,0 +1,69 @@
+import { notFound, redirect } from "next/navigation";
+import { and, eq, sql } from "drizzle-orm";
+import { db } from "@/db";
+import { bookings, creators } from "@/db/schema";
+import { getSession } from "@/lib/session";
+import { LocalTime } from "@/components/local-time";
+import { BookingActions } from "./booking-actions";
+
+const STATUS_LABEL: Record<string, string> = {
+  pending_payment: "Awaiting payment",
+  pending_approval: "Waiting for creator approval",
+  confirmed: "Confirmed",
+  completed: "Completed",
+  declined: "Declined by creator",
+  cancelled: "Cancelled",
+  refunded: "Refunded",
+  no_show_customer: "Missed (no-show)",
+  no_show_creator: "Creator no-show (refunded)",
+};
+
+export default async function BookingPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = await params;
+  const session = await getSession();
+  if (!session?.user) {
+    redirect("/signin");
+  }
+
+  const [row] = await db
+    .select({
+      booking: bookings,
+      slotStart: sql<string>`lower(${bookings.slot})`,
+      slotEnd: sql<string>`upper(${bookings.slot})`,
+      creatorName: creators.displayName,
+      creatorHandle: creators.handle,
+    })
+    .from(bookings)
+    .innerJoin(creators, eq(creators.userId, bookings.creatorId))
+    .where(and(eq(bookings.id, id), eq(bookings.customerId, session.user.id)))
+    .limit(1);
+
+  if (!row) {
+    notFound();
+  }
+  const { booking, slotStart, slotEnd, creatorName, creatorHandle } = row;
+
+  return (
+    <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center gap-6 p-6">
+      <h1 className="text-2xl font-semibold">
+        Video call with {creatorName}
+      </h1>
+      <div className="rounded-lg border border-gray-200 p-4">
+        <p className="font-medium">
+          <LocalTime iso={new Date(slotStart).toISOString()} /> –{" "}
+          <LocalTime iso={new Date(slotEnd).toISOString()} withDate={false} />
+        </p>
+        <p className="mt-1 text-gray-600">@{creatorHandle}</p>
+        <p className="mt-2 text-lg">${(booking.priceCents / 100).toFixed(2)}</p>
+        <p className="mt-2 text-sm text-gray-500">
+          {STATUS_LABEL[booking.status] ?? booking.status}
+        </p>
+      </div>
+      <BookingActions bookingId={booking.id} status={booking.status} />
+    </main>
+  );
+}

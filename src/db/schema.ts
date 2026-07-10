@@ -25,6 +25,7 @@ export const creatorStatus = pgEnum("creator_status", [
 ]);
 
 export const bookingStatus = pgEnum("booking_status", [
+  "pending_payment",
   "pending_approval",
   "confirmed",
   "completed",
