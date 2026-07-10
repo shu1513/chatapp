@@ -48,6 +48,18 @@ export default async function DashboardPage() {
         >
           Availability &amp; booking rules
         </Link>
+        <Link
+          href="/dashboard/profile"
+          className="rounded-lg border border-gray-200 p-4 hover:bg-gray-50"
+        >
+          Profile
+        </Link>
+        <Link
+          href="/dashboard/payouts"
+          className="rounded-lg border border-gray-200 p-4 hover:bg-gray-50"
+        >
+          Payouts
+        </Link>
       </nav>
     </main>
   );
