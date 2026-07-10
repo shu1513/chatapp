@@ -1,49 +1,52 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { bookings } from "@/db/schema";
+import { bookings, creators } from "@/db/schema";
+import { createBookingCheckout, refundBookingPayment } from "@/lib/payments";
 import { getSession } from "@/lib/session";
 
-export type BookingActionState = { error?: string };
+export type BookingActionState = { error?: string; checkoutUrl?: string };
 
-/**
- * Development-only stand-in for Stripe Checkout. Confirms a booking without
- * payment. Refuses to exist in production or once Stripe is configured.
- */
-export async function devConfirmBooking(
+/** Customer cancellations this close to the call keep the payment. */
+const FREE_CANCEL_HOURS = 24;
+
+export async function startCheckout(
   _prev: BookingActionState,
   formData: FormData,
 ): Promise<BookingActionState> {
-  if (process.env.NODE_ENV === "production" || process.env.STRIPE_SECRET_KEY) {
-    throw new Error(
-      "devConfirmBooking must be replaced by Stripe Checkout — refusing to run",
-    );
-  }
-
   const session = await getSession();
   if (!session?.user) {
     redirect("/signin");
   }
   const id = String(formData.get("bookingId"));
 
-  const updated = await db
-    .update(bookings)
-    .set({ status: "confirmed" })
-    .where(
-      and(
-        eq(bookings.id, id),
-        eq(bookings.customerId, session.user.id),
-        eq(bookings.status, "pending_payment"),
-      ),
-    )
-    .returning({ id: bookings.id });
+  const [row] = await db
+    .select({
+      booking: bookings,
+      creatorName: creators.displayName,
+      callLengthMin: creators.callLengthMin,
+    })
+    .from(bookings)
+    .innerJoin(creators, eq(creators.userId, bookings.creatorId))
+    .where(and(eq(bookings.id, id), eq(bookings.customerId, session.user.id)))
+    .limit(1);
 
-  if (updated.length === 0) {
+  if (!row || row.booking.status !== "pending_payment") {
     return { error: "Booking not found or not payable" };
   }
-  redirect(`/book/${id}`);
+
+  const url = await createBookingCheckout({
+    bookingId: row.booking.id,
+    priceCents: row.booking.priceCents,
+    creatorName: row.creatorName,
+    callLengthMin: row.callLengthMin,
+    customerEmail: session.user.email,
+  });
+  // Cross-origin redirect from a server action is unreliable; the client
+  // navigates to Stripe itself.
+  return { checkoutUrl: url };
 }
 
 export async function cancelBooking(
@@ -56,12 +59,19 @@ export async function cancelBooking(
   }
   const id = String(formData.get("bookingId"));
 
-  const booking = await db.query.bookings.findFirst({
-    where: and(eq(bookings.id, id), eq(bookings.customerId, session.user.id)),
-  });
-  if (!booking) {
+  const [row] = await db
+    .select({
+      booking: bookings,
+      slotStart: sql<string>`lower(${bookings.slot})`,
+    })
+    .from(bookings)
+    .where(and(eq(bookings.id, id), eq(bookings.customerId, session.user.id)))
+    .limit(1);
+  if (!row) {
     return { error: "Booking not found" };
   }
+  const { booking, slotStart } = row;
+
   if (
     !["pending_payment", "pending_approval", "confirmed"].includes(
       booking.status,
@@ -69,11 +79,21 @@ export async function cancelBooking(
   ) {
     return { error: "This booking can no longer be cancelled" };
   }
-  // TODO(stripe): refund per cancellation policy when payments land.
+
+  // Paid bookings: full refund outside the late-cancel window, otherwise
+  // the payment stays with the platform/creator.
+  const paid = booking.status === "confirmed" && booking.paymentIntentId;
+  const lateCancel =
+    new Date(slotStart).getTime() - Date.now() <
+    FREE_CANCEL_HOURS * 3600 * 1000;
+
+  if (paid && !lateCancel) {
+    await refundBookingPayment(booking.paymentIntentId!);
+  }
 
   await db
     .update(bookings)
-    .set({ status: "cancelled" })
+    .set({ status: paid && !lateCancel ? "refunded" : "cancelled" })
     .where(eq(bookings.id, id));
 
   redirect("/bookings");

@@ -267,6 +267,8 @@ export const bookings = pgTable("bookings", {
   status: bookingStatus("status").notNull(),
   priceCents: integer("price_cents").notNull(),
   paymentIntentId: text("payment_intent_id"),
+  /** when the creator accepted (approval-mode bookings await payment after) */
+  approvedAt: timestamp("approved_at", { withTimezone: true }),
   roomName: text("room_name"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()

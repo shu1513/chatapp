@@ -4,6 +4,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { bookings, callSessions, sessionEvents } from "@/db/schema";
 import { bothPresentSeconds, type PresenceEvent } from "@/lib/overlap";
+import { refundBookingPayment } from "@/lib/payments";
 import { endRoom, roomNameForBooking } from "@/lib/video";
 
 export const GRACE_SECONDS = 60;
@@ -80,6 +81,7 @@ async function getBooking(tx: Tx, bookingId: string) {
       creatorId: bookings.creatorId,
       customerId: bookings.customerId,
       status: bookings.status,
+      paymentIntentId: bookings.paymentIntentId,
       slotEnd: sql<string>`upper(${bookings.slot})`,
     })
     .from(bookings)
@@ -176,6 +178,9 @@ export async function settleSession(
   at: Date,
   source = "webhook",
 ): Promise<void> {
+  // Stripe calls must not run inside the transaction; collect and act after.
+  let refundPaymentIntentId: string | null = null;
+
   await withBookingLock(bookingId, async (tx) => {
     const booking = await getBooking(tx, bookingId);
     if (!booking) return;
@@ -232,7 +237,9 @@ export async function settleSession(
     const everPresent = new Set(events.map((e) => e.identity));
     const creatorShowed = everPresent.has(booking.creatorId);
     const finalStatus = creatorShowed ? "no_show_customer" : "no_show_creator";
-    // TODO(stripe): no_show_creator -> automatic full refund.
+    if (finalStatus === "no_show_creator" && booking.paymentIntentId) {
+      refundPaymentIntentId = booking.paymentIntentId;
+    }
 
     await tx
       .update(callSessions)
@@ -250,6 +257,19 @@ export async function settleSession(
         .where(and(eq(bookings.id, bookingId), eq(bookings.status, "confirmed")));
     }
   });
+
+  if (refundPaymentIntentId) {
+    try {
+      await refundBookingPayment(refundPaymentIntentId);
+    } catch (e) {
+      // Money-critical: never swallow silently. The booking stays
+      // no_show_creator; this log line is the retry queue for now.
+      console.error(
+        `[settle] REFUND FAILED for booking ${bookingId}, payment ${refundPaymentIntentId}`,
+        e,
+      );
+    }
+  }
 }
 
 /**

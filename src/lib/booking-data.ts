@@ -13,9 +13,15 @@ import { generateSlots, type Interval } from "@/lib/slots";
 /** How long a pending_payment booking holds its slot before going stale. */
 export const HOLD_TTL_MIN = 15;
 
-/** Payment holds go stale after 15 minutes; approval requests after 24 hours. */
+/**
+ * Unpaid holds go stale: 15 minutes for a fresh checkout, 24 hours when
+ * the creator approved and the fan hasn't paid yet, 24 hours for an
+ * unanswered approval request.
+ */
 const staleHold = sql`(
-  (${bookings.status} = 'pending_payment' AND ${bookings.createdAt} < now() - interval '15 minutes')
+  (${bookings.status} = 'pending_payment' AND ${bookings.approvedAt} IS NULL AND ${bookings.createdAt} < now() - interval '15 minutes')
+  OR
+  (${bookings.status} = 'pending_payment' AND ${bookings.approvedAt} IS NOT NULL AND ${bookings.approvedAt} < now() - interval '24 hours')
   OR
   (${bookings.status} = 'pending_approval' AND ${bookings.createdAt} < now() - interval '24 hours')
 )`;

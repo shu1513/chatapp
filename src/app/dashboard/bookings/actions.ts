@@ -17,11 +17,15 @@ async function reviewBooking(
     redirect("/signin");
   }
 
-  // TODO(stripe): on accept, charge the saved card before confirming; a
-  // failed charge should return the booking to the customer, not confirm.
+  // Accepting doesn't confirm — it moves the booking to pending_payment
+  // and the fan completes Checkout (24h window before the hold lapses).
   const updated = await db
     .update(bookings)
-    .set({ status: decision === "accept" ? "confirmed" : "declined" })
+    .set(
+      decision === "accept"
+        ? { status: "pending_payment", approvedAt: new Date() }
+        : { status: "declined" },
+    )
     .where(
       and(
         eq(bookings.id, bookingId),

@@ -1,9 +1,9 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useEffect } from "react";
 import {
   cancelBooking,
-  devConfirmBooking,
+  startCheckout,
   type BookingActionState,
 } from "./actions";
 
@@ -17,11 +17,17 @@ export function BookingActions({
   const [payState, payAction, payPending] = useActionState<
     BookingActionState,
     FormData
-  >(devConfirmBooking, {});
+  >(startCheckout, {});
   const [cancelState, cancelAction, cancelPending] = useActionState<
     BookingActionState,
     FormData
   >(cancelBooking, {});
+
+  useEffect(() => {
+    if (payState.checkoutUrl) {
+      window.location.href = payState.checkoutUrl;
+    }
+  }, [payState.checkoutUrl]);
 
   const cancellable = [
     "pending_payment",
@@ -39,7 +45,7 @@ export function BookingActions({
             disabled={payPending}
             className="w-full rounded bg-black px-4 py-2 text-white disabled:opacity-50"
           >
-            {payPending ? "Processing…" : "Pay (dev mode — no charge)"}
+            {payPending ? "Redirecting…" : "Pay now"}
           </button>
         </form>
       )}

@@ -14,7 +14,7 @@ Phase 1 (booking foundation) in progress:
 - [x] Creator onboarding and public `/@handle` profile pages
 - [x] Weekly availability rules with timezone-correct slot generation
 - [x] Booking flow with database-enforced double-booking prevention
-- [ ] Stripe Connect onboarding and Checkout
+- [x] Stripe Checkout, webhooks, refunds (Connect payouts pending)
 - [ ] Confirmation and reminder emails
 - [ ] Timed video calls (LiveKit) and settlement
 - [ ] Instant calls
