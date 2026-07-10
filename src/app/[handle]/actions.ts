@@ -62,7 +62,9 @@ export async function bookSlot(
         creatorId: creator.userId,
         customerId: session.user.id,
         slot: `[${slot.start.toISOString()},${slot.end.toISOString()})`,
-        status: "pending_payment",
+        // Approval-mode creators review requests first; payment happens on
+        // accept. Otherwise the fan pays immediately.
+        status: creator.approvalMode ? "pending_approval" : "pending_payment",
         priceCents: creator.rateCents,
       })
       .returning({ id: bookings.id });

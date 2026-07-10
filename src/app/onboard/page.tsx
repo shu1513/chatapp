@@ -82,6 +82,12 @@ export default function OnboardPage() {
             ))}
           </select>
         </label>
+        <label className="flex items-center gap-2">
+          <input type="checkbox" name="approvalMode" />
+          <span className="text-sm">
+            Review each booking request before it&apos;s confirmed
+          </span>
+        </label>
         <button
           type="submit"
           disabled={pending}

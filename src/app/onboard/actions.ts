@@ -41,6 +41,7 @@ const onboardSchema = z.object({
     .number()
     .int()
     .refine((v) => [10, 15, 30, 60].includes(v), "Invalid call length"),
+  approvalMode: z.coerce.boolean(),
   timezone: z
     .string()
     .refine((tz) => {
@@ -73,6 +74,7 @@ export async function onboardCreator(
     bio: formData.get("bio") || undefined,
     rateUsd: formData.get("rateUsd"),
     callLengthMin: formData.get("callLengthMin"),
+    approvalMode: formData.get("approvalMode") === "on",
     timezone: formData.get("timezone") ?? "UTC",
   });
 
@@ -87,8 +89,15 @@ export async function onboardCreator(
     redirect(`/@${existing.handle}`);
   }
 
-  const { handle, displayName, bio, rateUsd, callLengthMin, timezone } =
-    parsed.data;
+  const {
+    handle,
+    displayName,
+    bio,
+    rateUsd,
+    callLengthMin,
+    approvalMode,
+    timezone,
+  } = parsed.data;
 
   try {
     await db.transaction(async (tx) => {
@@ -99,6 +108,7 @@ export async function onboardCreator(
         bio,
         rateCents: rateUsd * 100,
         callLengthMin,
+        approvalMode,
         timezone,
       });
       await tx

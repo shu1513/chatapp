@@ -10,7 +10,12 @@ export const MIN_NOTICE_MIN = 60;
 /** How long a pending_payment booking holds its slot before going stale. */
 export const HOLD_TTL_MIN = 15;
 
-const staleHold = sql`(${bookings.status} = 'pending_payment' AND ${bookings.createdAt} < now() - interval '15 minutes')`;
+/** Payment holds go stale after 15 minutes; approval requests after 24 hours. */
+const staleHold = sql`(
+  (${bookings.status} = 'pending_payment' AND ${bookings.createdAt} < now() - interval '15 minutes')
+  OR
+  (${bookings.status} = 'pending_approval' AND ${bookings.createdAt} < now() - interval '24 hours')
+)`;
 
 /**
  * Intervals that block new bookings for a creator: every live booking,

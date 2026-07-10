@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { bookings, users } from "@/db/schema";
 import { getSession } from "@/lib/session";
 import { LocalTime } from "@/components/local-time";
+import { ReviewButtons } from "./review-buttons";
 
 export default async function CreatorBookingsPage() {
   const session = await getSession();
@@ -42,9 +43,14 @@ export default async function CreatorBookingsPage() {
                 </p>
                 <p className="text-sm text-gray-600">{b.customerEmail}</p>
               </div>
-              <div className="text-right">
-                <p className="text-sm">${(b.priceCents / 100).toFixed(0)}</p>
-                <p className="text-sm text-gray-500">{b.status}</p>
+              <div className="flex items-center gap-4">
+                <div className="text-right">
+                  <p className="text-sm">${(b.priceCents / 100).toFixed(0)}</p>
+                  <p className="text-sm text-gray-500">{b.status}</p>
+                </div>
+                {b.status === "pending_approval" && (
+                  <ReviewButtons bookingId={b.id} />
+                )}
               </div>
             </li>
           ))}
