@@ -77,15 +77,20 @@ export async function bookSlot(
       })
       .returning({ id: bookings.id });
     bookingId = row.id;
-    if (creator.approvalMode) {
-      await emailBookingRequested(bookingId);
-    }
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : "";
     if (msg.includes("bookings_no_overlap")) {
       return { error: "That time was just taken" };
     }
     throw e;
+  }
+
+  // Outside the insert's try/catch: a notification hiccup must never turn
+  // a successfully created booking into an error response.
+  if (creator.approvalMode) {
+    await emailBookingRequested(bookingId).catch((e) =>
+      console.error("[email] booking-requested notification failed:", e),
+    );
   }
 
   redirect(`/book/${bookingId}`);

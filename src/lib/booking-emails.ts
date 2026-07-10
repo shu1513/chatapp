@@ -23,6 +23,7 @@ type BookingContext = {
   customerEmail: string;
   creatorEmail: string;
   creatorName: string;
+  creatorHandle: string;
   creatorTimezone: string;
   slotStart: string;
   priceCents: number;
@@ -34,6 +35,7 @@ async function loadContext(bookingId: string): Promise<BookingContext | null> {
       customerEmail: users.email,
       creatorEmail: sql<string>`(SELECT email FROM users WHERE id = ${bookings.creatorId})`,
       creatorName: creators.displayName,
+      creatorHandle: creators.handle,
       creatorTimezone: creators.timezone,
       slotStart: sql<string>`lower(${bookings.slot})`,
       priceCents: bookings.priceCents,
@@ -81,7 +83,7 @@ export async function emailBookingDeclined(bookingId: string): Promise<void> {
   sendEmailSafe({
     to: c.customerEmail,
     subject: `${c.creatorName} can't make that time`,
-    text: `Your request for ${fmtTime(c.slotStart)} was declined. You haven't been charged.\n\nPick another time: ${baseUrl()}/@${encodeURIComponent(c.creatorName)}`,
+    text: `Your request for ${fmtTime(c.slotStart)} was declined. You haven't been charged.\n\nPick another time: ${baseUrl()}/@${c.creatorHandle}`,
   });
 }
 
