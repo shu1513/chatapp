@@ -5,6 +5,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { instantCallRequests } from "@/db/schema";
 import { getCreatorByHandle } from "@/lib/booking-data";
+import { isBlocked } from "@/lib/blocks";
 import { getLiveState, MAX_BLOCK_MIN, REQUEST_TTL_SEC } from "@/lib/instant";
 import { cancelPaymentAuth, createInstantAuthCheckout } from "@/lib/payments";
 import { getSession } from "@/lib/session";
@@ -28,6 +29,12 @@ export async function requestInstantCall(
   }
   if (creator.userId === session.user.id) {
     return { error: "You cannot call yourself" };
+  }
+  if (creator.status === "suspended") {
+    return { error: "This creator is not taking calls" };
+  }
+  if (await isBlocked(creator.userId, session.user.id)) {
+    return { error: "This creator is not taking your calls" };
   }
 
   const { live, rateCentsPerMin } = await getLiveState(creator.userId);

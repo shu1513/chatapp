@@ -17,7 +17,7 @@ export default async function CreatorPage({
   const handle = decoded.slice(1);
 
   const creator = await getCreatorByHandle(handle);
-  if (!creator) {
+  if (!creator || creator.status === "suspended") {
     notFound();
   }
 

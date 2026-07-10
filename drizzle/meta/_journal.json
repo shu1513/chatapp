@@ -71,6 +71,13 @@
       "when": 1783664892393,
       "tag": "0009_futuristic_epoch",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1783704890878,
+      "tag": "0010_bright_molecule_man",
+      "breakpoints": true
     }
   ]
 }

@@ -9,6 +9,7 @@ import {
   getAvailableSlots,
   getCreatorByHandle,
 } from "@/lib/booking-data";
+import { isBlocked } from "@/lib/blocks";
 import { getSession } from "@/lib/session";
 
 const requestSchema = z.object({
@@ -42,6 +43,12 @@ export async function bookSlot(
   }
   if (creator.userId === session.user.id) {
     return { error: "You cannot book yourself" };
+  }
+  if (creator.status === "suspended") {
+    return { error: "This creator is not taking bookings" };
+  }
+  if (await isBlocked(creator.userId, session.user.id)) {
+    return { error: "This creator is not taking your bookings" };
   }
 
   await expireStaleHolds(creator.userId);

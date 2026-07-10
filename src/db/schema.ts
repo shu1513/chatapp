@@ -196,6 +196,48 @@ export const payouts = pgTable("payouts", {
     .defaultNow(),
 });
 
+// --- trust & safety ---
+
+export const reportStatus = pgEnum("report_status", [
+  "open",
+  "resolved",
+  "dismissed",
+]);
+
+export const reports = pgTable("reports", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  reporterId: text("reporter_id")
+    .notNull()
+    .references(() => users.id),
+  reportedUserId: text("reported_user_id")
+    .notNull()
+    .references(() => users.id),
+  bookingId: uuid("booking_id").references(() => bookings.id),
+  reason: text("reason").notNull(),
+  status: reportStatus("status").notNull().default("open"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+/** Creator blocks a customer: no bookings, no instant calls. */
+export const blocks = pgTable(
+  "blocks",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    blockerId: text("blocker_id")
+      .notNull()
+      .references(() => users.id),
+    blockedId: text("blocked_id")
+      .notNull()
+      .references(() => users.id),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [unique().on(t.blockerId, t.blockedId)],
+);
+
 // --- domain tables ---
 
 export const creators = pgTable("creators", {
