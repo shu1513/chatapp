@@ -3,6 +3,7 @@ import type Stripe from "stripe";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { bookings, instantCallRequests, webhookEvents } from "@/db/schema";
+import { emailBookingConfirmed } from "@/lib/booking-emails";
 import { REQUEST_TTL_SEC } from "@/lib/instant";
 import { stripe } from "@/lib/payments";
 
@@ -62,7 +63,7 @@ export async function POST(req: Request) {
     }
 
     if (bookingId && session.payment_status === "paid") {
-      await db
+      const confirmed = await db
         .update(bookings)
         .set({
           status: "confirmed",
@@ -76,7 +77,11 @@ export async function POST(req: Request) {
             eq(bookings.id, bookingId),
             eq(bookings.status, "pending_payment"),
           ),
-        );
+        )
+        .returning({ id: bookings.id });
+      if (confirmed.length > 0) {
+        await emailBookingConfirmed(bookingId);
+      }
     }
   }
 

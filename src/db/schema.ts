@@ -290,6 +290,8 @@ export const bookings = pgTable("bookings", {
   paymentIntentId: text("payment_intent_id"),
   /** when the creator accepted (approval-mode bookings await payment after) */
   approvedAt: timestamp("approved_at", { withTimezone: true }),
+  /** T-60min reminder sent (exactly once) */
+  reminderSentAt: timestamp("reminder_sent_at", { withTimezone: true }),
   roomName: text("room_name"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()

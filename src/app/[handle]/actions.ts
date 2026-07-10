@@ -9,6 +9,7 @@ import {
   getAvailableSlots,
   getCreatorByHandle,
 } from "@/lib/booking-data";
+import { emailBookingRequested } from "@/lib/booking-emails";
 import { getSession } from "@/lib/session";
 
 const requestSchema = z.object({
@@ -69,6 +70,9 @@ export async function bookSlot(
       })
       .returning({ id: bookings.id });
     bookingId = row.id;
+    if (creator.approvalMode) {
+      await emailBookingRequested(bookingId);
+    }
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : "";
     if (msg.includes("bookings_no_overlap")) {

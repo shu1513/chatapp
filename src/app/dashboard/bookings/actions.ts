@@ -4,6 +4,10 @@ import { redirect } from "next/navigation";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { bookings } from "@/db/schema";
+import {
+  emailBookingApproved,
+  emailBookingDeclined,
+} from "@/lib/booking-emails";
 import { getSession } from "@/lib/session";
 
 export type ReviewState = { error?: string };
@@ -37,6 +41,11 @@ async function reviewBooking(
 
   if (updated.length === 0) {
     return { error: "Request not found or already handled" };
+  }
+  if (decision === "accept") {
+    await emailBookingApproved(bookingId);
+  } else {
+    await emailBookingDeclined(bookingId);
   }
   redirect("/dashboard/bookings");
 }
