@@ -359,14 +359,15 @@ export async function reconcilePresence(now = new Date()): Promise<void> {
       creatorId: bookings.creatorId,
       customerId: bookings.customerId,
       sessionId: callSessions.id,
-      sessionState: callSessions.state,
     })
     .from(bookings)
     .leftJoin(callSessions, eq(callSessions.bookingId, bookings.id))
     .where(
       and(
         eq(bookings.status, "confirmed"),
-        sql`${bookings.slot} && tstzrange(${now.toISOString()}::timestamptz - interval '10 minutes', ${now.toISOString()}::timestamptz)`,
+        // "Lobby (slot start − 10min) through slot end covers now" is
+        // equivalent to: slot overlaps [now, now + 10min).
+        sql`${bookings.slot} && tstzrange(${now.toISOString()}::timestamptz, ${now.toISOString()}::timestamptz + interval '10 minutes')`,
         sql`(${callSessions.state} IS NULL OR ${callSessions.state} != 'ended')`,
       ),
     );
