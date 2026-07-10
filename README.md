@@ -16,8 +16,8 @@ Phase 1 (booking foundation) in progress:
 - [x] Booking flow with database-enforced double-booking prevention
 - [x] Stripe Checkout, webhooks, refunds (Connect payouts pending)
 - [ ] Confirmation and reminder emails
-- [ ] Timed video calls (LiveKit) and settlement
-- [ ] Instant calls
+- [x] Timed video calls (LiveKit) with server-side session tracking
+- [x] Instant calls (presence, ringing, per-minute max-block)
 
 ## Stack
 
