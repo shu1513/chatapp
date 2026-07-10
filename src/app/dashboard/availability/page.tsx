@@ -53,6 +53,7 @@ export default async function AvailabilityPage() {
             bufferMin: creator.bufferMin,
             minNoticeMin: creator.minNoticeMin,
             horizonDays: creator.horizonDays,
+            instantRateCentsPerMin: creator.instantRateCentsPerMin,
           }}
         />
       </section>

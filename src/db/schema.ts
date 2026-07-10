@@ -34,6 +34,16 @@ export const callState = pgEnum("call_state", [
   "ended",
 ]);
 
+export const bookingKind = pgEnum("booking_kind", ["scheduled", "instant"]);
+
+export const instantRequestState = pgEnum("instant_request_state", [
+  "pending",
+  "accepted",
+  "declined",
+  "expired",
+  "cancelled",
+]);
+
 export const bookingStatus = pgEnum("booking_status", [
   "pending_payment",
   "pending_approval",
@@ -191,6 +201,25 @@ export const creators = pgTable("creators", {
   minNoticeMin: integer("min_notice_min").notNull().default(60),
   /** how far ahead fans can book, days */
   horizonDays: integer("horizon_days").notNull().default(14),
+  /** instant-call availability toggle; live = toggled on + recent heartbeat */
+  instantAvailable: boolean("instant_available").notNull().default(false),
+  lastSeenAt: timestamp("last_seen_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export const instantCallRequests = pgTable("instant_call_requests", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  creatorId: text("creator_id")
+    .notNull()
+    .references(() => creators.userId),
+  customerId: text("customer_id")
+    .notNull()
+    .references(() => users.id),
+  state: instantRequestState("state").notNull().default("pending"),
+  bookingId: uuid("booking_id").references(() => bookings.id),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -234,6 +263,7 @@ export const bookings = pgTable("bookings", {
     .notNull()
     .references(() => users.id),
   slot: tstzrange("slot").notNull(),
+  kind: bookingKind("kind").notNull().default("scheduled"),
   status: bookingStatus("status").notNull(),
   priceCents: integer("price_cents").notNull(),
   paymentIntentId: text("payment_intent_id"),

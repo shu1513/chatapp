@@ -126,6 +126,13 @@ const rulesSchema = z.object({
     .number()
     .int()
     .refine((v) => [7, 14, 30].includes(v), "Invalid horizon"),
+  /** dollars per minute; empty disables instant calls */
+  instantRateUsdPerMin: z
+    .union([
+      z.literal("").transform(() => null),
+      z.coerce.number().min(0.5, "Min $0.50/min").max(500),
+    ])
+    .nullable(),
 });
 
 export async function saveBookingRules(
@@ -137,13 +144,21 @@ export async function saveBookingRules(
     bufferMin: formData.get("bufferMin"),
     minNoticeMin: formData.get("minNoticeMin"),
     horizonDays: formData.get("horizonDays"),
+    instantRateUsdPerMin: formData.get("instantRateUsdPerMin") ?? "",
   });
   if (!parsed.success) {
     return { error: parsed.error.issues[0].message };
   }
+  const { instantRateUsdPerMin, ...rest } = parsed.data;
   await db
     .update(creators)
-    .set(parsed.data)
+    .set({
+      ...rest,
+      instantRateCentsPerMin:
+        instantRateUsdPerMin === null
+          ? null
+          : Math.round(instantRateUsdPerMin * 100),
+    })
     .where(eq(creators.userId, creator.userId));
   return { saved: true };
 }

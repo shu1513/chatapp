@@ -124,7 +124,12 @@ export function AvailabilityForm({
 export function BookingRulesForm({
   initial,
 }: {
-  initial: { bufferMin: number; minNoticeMin: number; horizonDays: number };
+  initial: {
+    bufferMin: number;
+    minNoticeMin: number;
+    horizonDays: number;
+    instantRateCentsPerMin: number | null;
+  };
 }) {
   const [state, formAction, pending] = useActionState<
     AvailabilityState,
@@ -170,6 +175,23 @@ export function BookingRulesForm({
           <option value={14}>2 weeks</option>
           <option value={30}>1 month</option>
         </select>
+      </label>
+      <label className="flex flex-col gap-1">
+        <span className="text-sm font-medium">Instant rate ($/min)</span>
+        <input
+          type="number"
+          name="instantRateUsdPerMin"
+          min={0.5}
+          max={500}
+          step={0.5}
+          placeholder="off"
+          defaultValue={
+            initial.instantRateCentsPerMin !== null
+              ? initial.instantRateCentsPerMin / 100
+              : ""
+          }
+          className="w-28 rounded border border-gray-300 px-2 py-1"
+        />
       </label>
       <button
         type="submit"
