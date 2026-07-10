@@ -24,14 +24,18 @@ Copy `.env.example`; every variable is required in production except
 
 ## Build & run
 
+`NEXT_PUBLIC_LIVEKIT_URL` is baked into the client bundle **at build
+time** — pass the real wss URL as a build arg; setting it only at runtime
+has no effect on browser code.
+
 ```bash
-docker build -t chatapp .
+docker build --build-arg NEXT_PUBLIC_LIVEKIT_URL=wss://YOUR-PROJECT.livekit.cloud -t chatapp .
 # run migrations once per deploy, then start
-docker run --env-file .env chatapp npx drizzle-kit migrate
+docker run --env-file .env chatapp node scripts/migrate.mjs
 docker run --env-file .env -p 3000:3000 chatapp
 ```
 
-Platform equivalents: release command = `npx drizzle-kit migrate`, start
+Platform equivalents: release command = `node scripts/migrate.mjs`, start
 command = `node server.js`, health check = `GET /api/health`.
 
 ## Post-deploy checklist
