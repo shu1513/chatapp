@@ -43,7 +43,7 @@ export function WaitingRoom({
   }, [expiresAtIso]);
 
   useEffect(() => {
-    if (state !== "pending") return;
+    if (state !== "pending" && state !== "awaiting_auth") return;
     const iv = setInterval(async () => {
       try {
         const res = await fetch(`/api/instant/status?id=${requestId}`);
@@ -63,6 +63,15 @@ export function WaitingRoom({
 
   return (
     <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center gap-6 p-6 text-center">
+      {state === "awaiting_auth" && (
+        <>
+          <div className="animate-pulse text-5xl">💳</div>
+          <h1 className="text-2xl font-semibold">Confirming your card…</h1>
+          <p className="text-gray-600">
+            We&apos;ll ring {creatorName} the moment your hold is confirmed.
+          </p>
+        </>
+      )}
       {state === "pending" && (
         <>
           <div className="animate-pulse text-5xl">📞</div>

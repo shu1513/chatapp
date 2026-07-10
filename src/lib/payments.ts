@@ -124,6 +124,75 @@ export async function transferToCreator(opts: {
   return transfer.id;
 }
 
+/**
+ * Checkout that authorizes (but does not capture) the instant-call max
+ * block. The webhook flips the request to `pending` once authorized,
+ * which starts the ring.
+ */
+export async function createInstantAuthCheckout(opts: {
+  requestId: string;
+  maxAmountCents: number;
+  ratePerMinCents: number;
+  creatorName: string;
+  customerEmail: string;
+}): Promise<string> {
+  const session = await stripe().checkout.sessions.create({
+    mode: "payment",
+    customer_email: opts.customerEmail,
+    line_items: [
+      {
+        quantity: 1,
+        price_data: {
+          currency: "usd",
+          unit_amount: opts.maxAmountCents,
+          product_data: {
+            name: `Instant call with ${opts.creatorName}`,
+            description: `$${(opts.ratePerMinCents / 100).toFixed(2)}/min — you only pay for time used; the rest of this hold is released`,
+          },
+        },
+      },
+    ],
+    metadata: { instantRequestId: opts.requestId },
+    payment_intent_data: {
+      capture_method: "manual",
+      metadata: { instantRequestId: opts.requestId },
+    },
+    success_url: `${baseUrl()}/instant/${opts.requestId}`,
+    cancel_url: `${baseUrl()}/instant/${opts.requestId}?cancelled=1`,
+    expires_at: Math.floor(Date.now() / 1000) + 30 * 60,
+  });
+  if (!session.url) throw new Error("Checkout session has no URL");
+  return session.url;
+}
+
+/** Capture part of a manual-capture auth; the remainder is released. */
+export async function capturePayment(
+  paymentIntentId: string,
+  amountCents: number,
+): Promise<void> {
+  await stripe().paymentIntents.capture(paymentIntentId, {
+    amount_to_capture: amountCents,
+  });
+}
+
+/** Release an uncaptured auth hold entirely. */
+export async function cancelPaymentAuth(
+  paymentIntentId: string,
+): Promise<void> {
+  try {
+    await stripe().paymentIntents.cancel(paymentIntentId);
+  } catch (e: unknown) {
+    // Already cancelled / already captured: nothing to release.
+    if (
+      e instanceof Stripe.errors.StripeError &&
+      e.code === "payment_intent_unexpected_state"
+    ) {
+      return;
+    }
+    throw e;
+  }
+}
+
 export async function refundBookingPayment(
   paymentIntentId: string,
 ): Promise<void> {

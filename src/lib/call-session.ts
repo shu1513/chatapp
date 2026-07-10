@@ -9,8 +9,12 @@ import {
   payouts,
   sessionEvents,
 } from "@/db/schema";
+import { MAX_BLOCK_MIN } from "@/lib/instant";
+import { instantCaptureCents } from "@/lib/instant-billing";
 import { bothPresentSeconds, type PresenceEvent } from "@/lib/overlap";
 import {
+  cancelPaymentAuth,
+  capturePayment,
   creatorShareCents,
   refundBookingPayment,
   transferToCreator,
@@ -94,6 +98,8 @@ async function getBooking(tx: Tx, bookingId: string) {
       creatorId: bookings.creatorId,
       customerId: bookings.customerId,
       status: bookings.status,
+      kind: bookings.kind,
+      priceCents: bookings.priceCents,
       paymentIntentId: bookings.paymentIntentId,
       slotEnd: sql<string>`upper(${bookings.slot})`,
     })
@@ -191,14 +197,21 @@ export async function settleSession(
   at: Date,
   source = "webhook",
 ): Promise<void> {
-  // Stripe calls must not run inside the transaction; collect and act after.
-  let refundPaymentIntentId: string | null = null;
+  // Stripe calls must not run inside the transaction; the callback
+  // returns what to do afterwards.
+  type MoneyActions = {
+    capture?: { paymentIntentId: string; amountCents: number };
+    releaseAuth?: string;
+    refund?: string;
+  };
 
-  await withBookingLock(bookingId, async (tx) => {
+  const actions = await withBookingLock<MoneyActions>(
+    bookingId,
+    async (tx) => {
     const booking = await getBooking(tx, bookingId);
-    if (!booking) return;
+    if (!booking) return {};
     const session = await getOrCreateSession(tx, bookingId);
-    if (session.state === "ended") return;
+    if (session.state === "ended") return {};
 
     await tx.insert(sessionEvents).values({
       sessionId: session.id,
@@ -226,13 +239,29 @@ export async function settleSession(
           graceExpiresAt: null,
         })
         .where(eq(callSessions.id, session.id));
-      if (booking.status === "confirmed") {
-        await tx
-          .update(bookings)
-          .set({ status: "completed" })
-          .where(and(eq(bookings.id, bookingId), eq(bookings.status, "confirmed")));
+      if (booking.status !== "confirmed") return {};
+
+      // Instant calls: capture actual minutes from the auth hold and
+      // reprice the booking to what was actually charged (payouts use
+      // priceCents). Scheduled calls were captured at booking time.
+      let finalPriceCents = booking.priceCents;
+      let capture: MoneyActions["capture"];
+      if (booking.kind === "instant" && booking.paymentIntentId) {
+        finalPriceCents = instantCaptureCents({
+          maxBlockPriceCents: booking.priceCents,
+          maxBlockMin: MAX_BLOCK_MIN,
+          billableSeconds: billable,
+        });
+        capture = {
+          paymentIntentId: booking.paymentIntentId,
+          amountCents: finalPriceCents,
+        };
       }
-      return;
+      await tx
+        .update(bookings)
+        .set({ status: "completed", priceCents: finalPriceCents })
+        .where(and(eq(bookings.id, bookingId), eq(bookings.status, "confirmed")));
+      return { capture };
     }
 
     if (!slotOver) {
@@ -241,7 +270,7 @@ export async function settleSession(
         .update(callSessions)
         .set({ state: "scheduled", graceExpiresAt: null })
         .where(eq(callSessions.id, session.id));
-      return;
+      return {};
     }
 
     // Slot over, no call happened: classify the no-show. Fan-protective
@@ -250,8 +279,12 @@ export async function settleSession(
     const everPresent = new Set(events.map((e) => e.identity));
     const creatorShowed = everPresent.has(booking.creatorId);
     const finalStatus = creatorShowed ? "no_show_customer" : "no_show_creator";
-    if (finalStatus === "no_show_creator" && booking.paymentIntentId) {
-      refundPaymentIntentId = booking.paymentIntentId;
+    const result: MoneyActions = {};
+    if (booking.kind === "instant" && booking.paymentIntentId) {
+      // Nothing was captured yet — release the hold no matter who flaked.
+      result.releaseAuth = booking.paymentIntentId;
+    } else if (finalStatus === "no_show_creator" && booking.paymentIntentId) {
+      result.refund = booking.paymentIntentId;
     }
 
     await tx
@@ -269,16 +302,41 @@ export async function settleSession(
         .set({ status: finalStatus })
         .where(and(eq(bookings.id, bookingId), eq(bookings.status, "confirmed")));
     }
-  });
+    return result;
+    },
+  );
 
-  if (refundPaymentIntentId) {
+  if (actions.capture) {
     try {
-      await refundBookingPayment(refundPaymentIntentId);
+      await capturePayment(
+        actions.capture.paymentIntentId,
+        actions.capture.amountCents,
+      );
+    } catch (e) {
+      console.error(
+        `[settle] CAPTURE FAILED for booking ${bookingId}, payment ${actions.capture.paymentIntentId}`,
+        e,
+      );
+    }
+  }
+  if (actions.releaseAuth) {
+    try {
+      await cancelPaymentAuth(actions.releaseAuth);
+    } catch (e) {
+      console.error(
+        `[settle] AUTH RELEASE FAILED for booking ${bookingId}, payment ${actions.releaseAuth}`,
+        e,
+      );
+    }
+  }
+  if (actions.refund) {
+    try {
+      await refundBookingPayment(actions.refund);
     } catch (e) {
       // Money-critical: never swallow silently. The booking stays
       // no_show_creator; this log line is the retry queue for now.
       console.error(
-        `[settle] REFUND FAILED for booking ${bookingId}, payment ${refundPaymentIntentId}`,
+        `[settle] REFUND FAILED for booking ${bookingId}, payment ${actions.refund}`,
         e,
       );
     }

@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import type Stripe from "stripe";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { bookings, webhookEvents } from "@/db/schema";
+import { bookings, instantCallRequests, webhookEvents } from "@/db/schema";
+import { REQUEST_TTL_SEC } from "@/lib/instant";
 import { stripe } from "@/lib/payments";
 
 export async function POST(req: Request) {
@@ -36,6 +37,30 @@ export async function POST(req: Request) {
   if (event.type === "checkout.session.completed") {
     const session = event.data.object;
     const bookingId = session.metadata?.bookingId;
+    const instantRequestId = session.metadata?.instantRequestId;
+    const paymentIntentId =
+      typeof session.payment_intent === "string"
+        ? session.payment_intent
+        : session.payment_intent?.id;
+
+    // Instant call: the max block is authorized (manual capture, so
+    // payment_status stays 'unpaid') — start the ring.
+    if (instantRequestId && paymentIntentId) {
+      await db
+        .update(instantCallRequests)
+        .set({
+          state: "pending",
+          authPaymentIntentId: paymentIntentId,
+          expiresAt: new Date(Date.now() + REQUEST_TTL_SEC * 1000),
+        })
+        .where(
+          and(
+            eq(instantCallRequests.id, instantRequestId),
+            eq(instantCallRequests.state, "awaiting_auth"),
+          ),
+        );
+    }
+
     if (bookingId && session.payment_status === "paid") {
       await db
         .update(bookings)

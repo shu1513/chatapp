@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useEffect } from "react";
 import {
   requestInstantCall,
   type InstantRequestState,
@@ -17,6 +17,12 @@ export function CallNowButton({
     InstantRequestState,
     FormData
   >(requestInstantCall, {});
+
+  useEffect(() => {
+    if (state.checkoutUrl) {
+      window.location.href = state.checkoutUrl;
+    }
+  }, [state.checkoutUrl]);
 
   return (
     <form action={formAction} className="flex flex-col gap-2">

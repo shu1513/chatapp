@@ -5,6 +5,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { bookings, creators, instantCallRequests } from "@/db/schema";
 import { MAX_BLOCK_MIN } from "@/lib/instant";
+import { cancelPaymentAuth } from "@/lib/payments";
 import { getSession } from "@/lib/session";
 
 async function requireCreatorId(): Promise<string> {
@@ -60,6 +61,9 @@ export async function acceptInstant(
       .update(instantCallRequests)
       .set({ state: "expired" })
       .where(eq(instantCallRequests.id, requestId));
+    if (request.authPaymentIntentId) {
+      await cancelPaymentAuth(request.authPaymentIntentId);
+    }
     return { error: "Request expired" };
   }
 
@@ -76,6 +80,7 @@ export async function acceptInstant(
         kind: "instant",
         status: "confirmed",
         priceCents: creator.instantRateCentsPerMin * MAX_BLOCK_MIN,
+        paymentIntentId: request.authPaymentIntentId,
       })
       .returning({ id: bookings.id });
     bookingId = row.id;
@@ -107,7 +112,7 @@ export async function declineInstant(
 ): Promise<InstantReviewState> {
   const creatorId = await requireCreatorId();
   const requestId = String(formData.get("requestId"));
-  await db
+  const [declined] = await db
     .update(instantCallRequests)
     .set({ state: "declined" })
     .where(
@@ -116,6 +121,12 @@ export async function declineInstant(
         eq(instantCallRequests.creatorId, creatorId),
         eq(instantCallRequests.state, "pending"),
       ),
-    );
+    )
+    .returning({
+      authPaymentIntentId: instantCallRequests.authPaymentIntentId,
+    });
+  if (declined?.authPaymentIntentId) {
+    await cancelPaymentAuth(declined.authPaymentIntentId);
+  }
   return {};
 }

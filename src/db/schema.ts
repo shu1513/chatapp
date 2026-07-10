@@ -37,6 +37,8 @@ export const callState = pgEnum("call_state", [
 export const bookingKind = pgEnum("booking_kind", ["scheduled", "instant"]);
 
 export const instantRequestState = pgEnum("instant_request_state", [
+  /** fan is authorizing the max-block hold; creator not rung yet */
+  "awaiting_auth",
   "pending",
   "accepted",
   "declined",
@@ -236,6 +238,8 @@ export const instantCallRequests = pgTable("instant_call_requests", {
     .references(() => users.id),
   state: instantRequestState("state").notNull().default("pending"),
   bookingId: uuid("booking_id").references(() => bookings.id),
+  /** manual-capture PaymentIntent holding the max block */
+  authPaymentIntentId: text("auth_payment_intent_id"),
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()

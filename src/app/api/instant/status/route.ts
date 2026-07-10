@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { instantCallRequests } from "@/db/schema";
+import { cancelPaymentAuth } from "@/lib/payments";
 import { getSession } from "@/lib/session";
 
 /** Fan polls their instant request. Lazily expires overdue rings. */
@@ -26,18 +27,24 @@ export async function GET(req: Request) {
   }
 
   if (
-    request.state === "pending" &&
+    (request.state === "pending" || request.state === "awaiting_auth") &&
     request.expiresAt.getTime() <= Date.now()
   ) {
-    await db
+    const [expired] = await db
       .update(instantCallRequests)
       .set({ state: "expired" })
       .where(
         and(
           eq(instantCallRequests.id, id),
-          eq(instantCallRequests.state, "pending"),
+          eq(instantCallRequests.state, request.state),
         ),
-      );
+      )
+      .returning({
+        authPaymentIntentId: instantCallRequests.authPaymentIntentId,
+      });
+    if (expired?.authPaymentIntentId) {
+      await cancelPaymentAuth(expired.authPaymentIntentId);
+    }
     return NextResponse.json({ state: "expired", bookingId: null });
   }
 
