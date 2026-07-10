@@ -3,7 +3,11 @@
 import { redirect } from "next/navigation";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { bookings } from "@/db/schema";
+import { blocks, bookings } from "@/db/schema";
+import {
+  emailBookingApproved,
+  emailBookingDeclined,
+} from "@/lib/booking-emails";
 import { getSession } from "@/lib/session";
 
 export type ReviewState = { error?: string };
@@ -38,6 +42,11 @@ async function reviewBooking(
   if (updated.length === 0) {
     return { error: "Request not found or already handled" };
   }
+  if (decision === "accept") {
+    await emailBookingApproved(bookingId);
+  } else {
+    await emailBookingDeclined(bookingId);
+  }
   redirect("/dashboard/bookings");
 }
 
@@ -53,4 +62,30 @@ export async function declineBooking(
   formData: FormData,
 ): Promise<ReviewState> {
   return reviewBooking(String(formData.get("bookingId")), "decline");
+}
+
+/** Creator blocks the customer on a booking: no future bookings/calls. */
+export async function blockCustomer(
+  _prev: ReviewState,
+  formData: FormData,
+): Promise<ReviewState> {
+  const session = await getSession();
+  if (!session?.user) {
+    redirect("/signin");
+  }
+  const bookingId = String(formData.get("bookingId"));
+  const booking = await db.query.bookings.findFirst({
+    where: and(
+      eq(bookings.id, bookingId),
+      eq(bookings.creatorId, session.user.id),
+    ),
+  });
+  if (!booking) {
+    return { error: "Booking not found" };
+  }
+  await db
+    .insert(blocks)
+    .values({ blockerId: session.user.id, blockedId: booking.customerId })
+    .onConflictDoNothing();
+  redirect("/dashboard/bookings");
 }

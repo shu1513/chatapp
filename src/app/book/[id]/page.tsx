@@ -6,6 +6,7 @@ import { bookings, creators } from "@/db/schema";
 import { getSession } from "@/lib/session";
 import { LocalTime } from "@/components/local-time";
 import { BookingActions } from "./booking-actions";
+import { ReportButton } from "./report-button";
 
 const STATUS_LABEL: Record<string, string> = {
   pending_payment: "Awaiting payment",
@@ -82,6 +83,7 @@ export default async function BookingPage({
           </Link>
         )}
       <BookingActions bookingId={booking.id} status={booking.status} />
+      <ReportButton bookingId={booking.id} />
     </main>
   );
 }

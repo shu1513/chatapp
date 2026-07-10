@@ -9,6 +9,8 @@ import {
   getAvailableSlots,
   getCreatorByHandle,
 } from "@/lib/booking-data";
+import { emailBookingRequested } from "@/lib/booking-emails";
+import { isBlocked } from "@/lib/blocks";
 import { getSession } from "@/lib/session";
 
 const requestSchema = z.object({
@@ -43,6 +45,12 @@ export async function bookSlot(
   if (creator.userId === session.user.id) {
     return { error: "You cannot book yourself" };
   }
+  if (creator.status === "suspended") {
+    return { error: "This creator is not taking bookings" };
+  }
+  if (await isBlocked(creator.userId, session.user.id)) {
+    return { error: "This creator is not taking your bookings" };
+  }
 
   await expireStaleHolds(creator.userId);
 
@@ -75,6 +83,14 @@ export async function bookSlot(
       return { error: "That time was just taken" };
     }
     throw e;
+  }
+
+  // Outside the insert's try/catch: a notification hiccup must never turn
+  // a successfully created booking into an error response.
+  if (creator.approvalMode) {
+    await emailBookingRequested(bookingId).catch((e) =>
+      console.error("[email] booking-requested notification failed:", e),
+    );
   }
 
   redirect(`/book/${bookingId}`);

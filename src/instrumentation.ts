@@ -21,4 +21,13 @@ export async function register() {
       console.error("[sweeper]", e);
     }
   }, 15_000);
+
+  const { sendDueReminders } = await import("@/lib/booking-emails");
+  setInterval(async () => {
+    try {
+      await sendDueReminders();
+    } catch (e) {
+      console.error("[reminders]", e);
+    }
+  }, 60_000);
 }

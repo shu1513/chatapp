@@ -5,6 +5,7 @@ import { db } from "@/db";
 import { bookings, users } from "@/db/schema";
 import { getSession } from "@/lib/session";
 import { LocalTime } from "@/components/local-time";
+import { BlockButton } from "./block-button";
 import { ReviewButtons } from "./review-buttons";
 
 export default async function CreatorBookingsPage() {
@@ -44,6 +45,7 @@ export default async function CreatorBookingsPage() {
                   <LocalTime iso={new Date(b.slotStart).toISOString()} />
                 </p>
                 <p className="text-sm text-gray-600">{b.customerEmail}</p>
+                <BlockButton bookingId={b.id} />
               </div>
               <div className="flex items-center gap-4">
                 <div className="text-right">
