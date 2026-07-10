@@ -3,6 +3,9 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { creators } from "@/db/schema";
 
+// Creator list is live data — never prerender at build time.
+export const dynamic = "force-dynamic";
+
 export default async function Home() {
   const featured = await db.query.creators.findMany({
     where: eq(creators.status, "active"),

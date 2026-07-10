@@ -1,0 +1,16 @@
+# Local LiveKit server config for development.
+# Run with: npm run livekit  (see package.json)
+port: 7880
+rtc:
+  tcp_port: 7881
+  port_range_start: 50000
+  port_range_end: 50060
+  use_external_ip: false
+keys:
+  devkey: devsecret_at_least_32_chars_long_ok
+webhook:
+  api_key: devkey
+  urls:
+    - http://localhost:3000/api/livekit/webhook
+logging:
+  level: info

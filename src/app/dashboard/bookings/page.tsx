@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { desc, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
@@ -18,6 +19,7 @@ export default async function CreatorBookingsPage() {
       status: bookings.status,
       priceCents: bookings.priceCents,
       slotStart: sql<string>`lower(${bookings.slot})`,
+      slotEnd: sql<string>`upper(${bookings.slot})`,
       customerEmail: users.email,
     })
     .from(bookings)
@@ -51,6 +53,15 @@ export default async function CreatorBookingsPage() {
                 {b.status === "pending_approval" && (
                   <ReviewButtons bookingId={b.id} />
                 )}
+                {b.status === "confirmed" &&
+                  new Date(b.slotEnd).getTime() > Date.now() && (
+                    <Link
+                      href={`/call/${b.id}`}
+                      className="rounded bg-green-700 px-3 py-1 text-sm text-white"
+                    >
+                      Join
+                    </Link>
+                  )}
               </div>
             </li>
           ))}

@@ -29,6 +29,13 @@
       "when": 1783641474461,
       "tag": "0003_lame_hitman",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1783642733314,
+      "tag": "0004_perpetual_black_bolt",
+      "breakpoints": true
     }
   ]
 }

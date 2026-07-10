@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
@@ -63,6 +64,15 @@ export default async function BookingPage({
           {STATUS_LABEL[booking.status] ?? booking.status}
         </p>
       </div>
+      {booking.status === "confirmed" &&
+        new Date(slotEnd).getTime() > Date.now() && (
+          <Link
+            href={`/call/${booking.id}`}
+            className="rounded bg-green-700 px-4 py-2 text-center text-white"
+          >
+            Join call
+          </Link>
+        )}
       <BookingActions bookingId={booking.id} status={booking.status} />
     </main>
   );

@@ -2,6 +2,7 @@ import {
   boolean,
   customType,
   integer,
+  jsonb,
   pgEnum,
   pgTable,
   text,
@@ -22,6 +23,13 @@ export const creatorStatus = pgEnum("creator_status", [
   "pending",
   "active",
   "suspended",
+]);
+
+export const callState = pgEnum("call_state", [
+  "scheduled",
+  "active",
+  "grace",
+  "ended",
 ]);
 
 export const bookingStatus = pgEnum("booking_status", [
@@ -106,6 +114,53 @@ export const verifications = pgTable("verifications", {
     .notNull()
     .defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+// --- call tracking ---
+
+export const callSessions = pgTable("call_sessions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  bookingId: uuid("booking_id")
+    .notNull()
+    .unique()
+    .references(() => bookings.id),
+  state: callState("state").notNull().default("scheduled"),
+  /** seconds during which BOTH participants were connected */
+  billableSeconds: integer("billable_seconds"),
+  startedAt: timestamp("started_at", { withTimezone: true }),
+  endedAt: timestamp("ended_at", { withTimezone: true }),
+  graceExpiresAt: timestamp("grace_expires_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+/** Append-only audit trail of everything that happened in a call. */
+export const sessionEvents = pgTable("session_events", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  sessionId: uuid("session_id")
+    .notNull()
+    .references(() => callSessions.id),
+  type: text("type").notNull(),
+  /** participant identity (user id), when applicable */
+  identity: text("identity"),
+  at: timestamp("at", { withTimezone: true }).notNull(),
+  source: text("source").notNull().default("webhook"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+/** Raw provider webhook deliveries, for idempotency and audit. */
+export const webhookEvents = pgTable("webhook_events", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  provider: text("provider").notNull(),
+  eventId: text("event_id").notNull().unique(),
+  payload: jsonb("payload").notNull(),
+  processedAt: timestamp("processed_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
 });
